@@ -12,6 +12,7 @@ import (
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/native"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
@@ -32,6 +33,7 @@ type Config struct {
 	Go      golang.Config  `mapstructure:"go" json:"go,omitempty"`
 	BEAM    beam.Config    `mapstructure:"beam" json:"beam,omitempty"`
 	LuaJIT  luajit.Config  `mapstructure:"luajit" json:"luajit,omitempty"`
+	Symtab  native.Config  `mapstructure:"symtab" json:"symtab,omitempty"`
 }
 
 // AllInterpreters returns a Config with all interpreters enabled.
@@ -51,6 +53,7 @@ func NoInterpreters() Config {
 		Go:      golang.Config{BaseConfig: disabled},
 		BEAM:    beam.Config{BaseConfig: disabled},
 		LuaJIT:  luajit.Config{BaseConfig: disabled},
+		Symtab:  native.Config{},
 	}
 }
 

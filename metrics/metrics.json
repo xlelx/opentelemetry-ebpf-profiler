@@ -2209,5 +2209,19 @@
     "name": "NumPriorityEventDeferred",
     "field": "bpf.num_priority_event_deferred",
     "id": 302
+  },
+  {
+    "description": "Number of successfully symbolized native frames",
+    "type": "counter",
+    "name": "NativeSymbolizationSuccess",
+    "field": "ha.native.symbolization.success",
+    "id": 303
+  },
+  {
+    "description": "Number of native frames that failed symbolization",
+    "type": "counter",
+    "name": "NativeSymbolizationFailure",
+    "field": "ha.native.symbolization.failure",
+    "id": 304
   }
 ]

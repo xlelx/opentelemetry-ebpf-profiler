@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/peterbourgon/ff/v3"
-
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -255,6 +254,8 @@ func parseTracers(tracers string) (interpreterconfig.Config, error) {
 		case "luajit":
 			log.Warn("The LuaJIT interpreter is incomplete and may not work properly")
 			cfg.LuaJIT.Disabled = false
+		case "symtab":
+			cfg.Symtab.Enabled = true
 		case "native":
 			log.Warn("Enabling the `native` tracer explicitly is deprecated (it's always-on)")
 		case "":
