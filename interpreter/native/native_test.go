@@ -5,6 +5,8 @@ package native
 
 import (
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -18,6 +20,19 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
+
+func requireNativeTestBin(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("native ELF test binary is only built on Linux")
+	}
+	if _, err := os.Stat("testdata/testbin"); err == nil {
+		return
+	}
+	cmd := exec.Command("make", "-C", "testdata", "testbin")
+	out, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "failed to build native test binary: %s", out)
+}
 
 func TestLoaderSkipsGoBinary(t *testing.T) {
 	exec, err := os.Executable()
@@ -39,7 +54,9 @@ func TestLoaderSkipsGoBinary(t *testing.T) {
 }
 
 func TestLoaderNativeBinary(t *testing.T) {
-	// Use testdata/testbin as a native (non-Go) ELF with .dynsym symbols.
+	requireNativeTestBin(t)
+
+	// Use testdata/testbin as a native (non-Go) ELF with symbol table entries.
 	elfRef := pfelf.NewReference("testdata/testbin", pfelf.SystemOpener)
 
 	hostFileID, err := host.FileIDFromBytes(
@@ -53,10 +70,12 @@ func TestLoaderNativeBinary(t *testing.T) {
 
 	nd, ok := data.(*nativeData)
 	require.True(t, ok)
-	assert.Greater(t, len(nd.symbols), 0)
+	assert.Greater(t, nd.numSyms, 0)
 }
 
 func TestSymbolize(t *testing.T) {
+	requireNativeTestBin(t)
+
 	elfRef := pfelf.NewReference("testdata/testbin", pfelf.SystemOpener)
 
 	hostFileID, err := host.FileIDFromBytes(
@@ -69,14 +88,15 @@ func TestSymbolize(t *testing.T) {
 	require.NotNil(t, data)
 
 	nd := data.(*nativeData)
-	require.Greater(t, len(nd.symbols), 0)
+	require.Greater(t, nd.numSyms, 0)
 
-	sym := nd.symbols[len(nd.symbols)/2]
+	sym := firstSymbol(nd)
+	symAddr := (uint64(sym.high) << 32) | uint64(sym.entry.address)
 
 	instance, err := data.Attach(nil, 0, 0, remotememory.RemoteMemory{})
 	require.NoError(t, err)
 
-	ef := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, sym.address)
+	ef := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, symAddr)
 	ef[1] = uint64(hostFileID)
 
 	var frames libpf.Frames
@@ -88,11 +108,13 @@ func TestSymbolize(t *testing.T) {
 	assert.Equal(t, libpf.NativeFrame, frame.Type)
 
 	// Resolve the expected name the same way the symbolizer does.
-	expectedName := nd.resolveSymbolName(sym.nameOff)
+	expectedName := nd.resolveSymbolName(sym.entry.nameOff)
 	assert.Equal(t, expectedName, frame.FunctionName.String())
 }
 
 func TestSymbolizeMismatch(t *testing.T) {
+	requireNativeTestBin(t)
+
 	elfRef := pfelf.NewReference("testdata/testbin", pfelf.SystemOpener)
 
 	hostFileID, err := host.FileIDFromBytes(
@@ -125,17 +147,19 @@ func TestLookupSymbol(t *testing.T) {
 	strtab := []byte("\x00func_a\x00func_b\x00func_c\x00")
 	// offsets: func_a=1, func_b=8, func_c=15
 
-	cache, err := lru.New[uint32, string](64, hash.Uint32)
+	syncedCache, err := lru.NewSynced[uint32, string](64, hash.Uint32)
 	require.NoError(t, err)
 
 	d := &nativeData{
-		symbols: []symbolEntry{
-			{address: 0x1000, end: 0x1100, nameOff: 1},
-			{address: 0x1100, end: 0x1200, nameOff: 8},
-			{address: 0x2000, end: 0x2050, nameOff: 15},
+		symbols: map[uint32][]symbolEntry{
+			0: {
+				{address: 0x1000, size: 0x100, nameOff: 1},
+				{address: 0x1100, size: 0x100, nameOff: 8},
+				{address: 0x2000, size: 0x50, nameOff: 15},
+			},
 		},
 		strtab:    strtab,
-		nameCache: cache,
+		nameCache: syncedCache,
 	}
 
 	tests := []struct {
@@ -159,6 +183,20 @@ func TestLookupSymbol(t *testing.T) {
 		assert.Equal(t, tt.wantOK, ok, "addr 0x%x", tt.addr)
 		assert.Equal(t, tt.wantName, name, "addr 0x%x", tt.addr)
 	}
+}
+
+type selectedSymbol struct {
+	high  uint32
+	entry symbolEntry
+}
+
+func firstSymbol(d *nativeData) selectedSymbol {
+	for high, symbols := range d.symbols {
+		if len(symbols) > 0 {
+			return selectedSymbol{high: high, entry: symbols[len(symbols)/2]}
+		}
+	}
+	return selectedSymbol{}
 }
 
 func TestDemangleSymbol(t *testing.T) {

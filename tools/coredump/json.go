@@ -32,9 +32,15 @@ type CoredumpTestCase struct {
 
 func (c *CoredumpTestCase) interpretersConfig() interpreterconfig.Config {
 	if c.Interpreters == nil {
-		return interpreterconfig.AllInterpreters()
+		return coredumpInterpretersConfig()
 	}
 	return *c.Interpreters
+}
+
+func coredumpInterpretersConfig() interpreterconfig.Config {
+	cfg := interpreterconfig.AllInterpreters()
+	cfg.Symtab.Enabled = true
+	return cfg
 }
 
 // ModuleInfo stores information about a module that was loaded when the coredump was created.
