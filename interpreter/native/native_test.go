@@ -5,12 +5,12 @@ package native
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	lru "github.com/elastic/go-freelru"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -29,8 +29,11 @@ func TestLoaderSkipsGoBinary(t *testing.T) {
 		[]byte{0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55})
 	require.NoError(t, err)
 
-	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
+	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef, nil)
 	data, err := Loader(nil, loaderInfo)
+	if err != nil && strings.Contains(err.Error(), "not an ELF file") {
+		t.Skip("test executable is not an ELF binary")
+	}
 	require.NoError(t, err)
 	assert.Nil(t, data, "Loader should skip Go binaries")
 }
@@ -43,7 +46,7 @@ func TestLoaderNativeBinary(t *testing.T) {
 		[]byte{0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55})
 	require.NoError(t, err)
 
-	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
+	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef, nil)
 	data, err := Loader(nil, loaderInfo)
 	require.NoError(t, err)
 	require.NotNil(t, data, "expected native symbolizer data for testdata/testbin")
@@ -60,7 +63,7 @@ func TestSymbolize(t *testing.T) {
 		[]byte{0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55})
 	require.NoError(t, err)
 
-	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
+	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef, nil)
 	data, err := Loader(nil, loaderInfo)
 	require.NoError(t, err)
 	require.NotNil(t, data)
@@ -96,7 +99,7 @@ func TestSymbolizeMismatch(t *testing.T) {
 		[]byte{0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55})
 	require.NoError(t, err)
 
-	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
+	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef, nil)
 	data, err := Loader(nil, loaderInfo)
 	require.NoError(t, err)
 	require.NotNil(t, data)
